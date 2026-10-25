@@ -140,25 +140,39 @@ class MainActivity : FlutterActivity() {
                         }
                     }
                     "getSimCards" -> {
-                        try {
-                            val sims = usageMeasurementService.getActiveSims().map { it.toMap() }
-                            result.success(sims)
-                        } catch (e: Exception) {
-                            result.error("SIMS_FAILED", e.message, null)
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            try {
+                                val sims = usageMeasurementService.getActiveSims().map { it.toMap() }
+                                withContext(Dispatchers.Main) {
+                                    result.success(sims)
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    result.error("SIMS_FAILED", e.message, null)
+                                }
+                            }
                         }
                     }
                     "getNetworkUsage" -> {
                         val packageName = call.argument<String>("packageName")
-                        try {
-                            if (packageName != null) {
-                                val usage = usageMeasurementService.getTodayUsageForPackage(packageName)
-                                result.success(usage)
-                            } else {
-                                val allUsage = usageMeasurementService.getAllAppsTodayUsage()
-                                result.success(allUsage)
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            try {
+                                if (packageName != null) {
+                                    val usage = usageMeasurementService.getTodayUsageForPackage(packageName)
+                                    withContext(Dispatchers.Main) {
+                                        result.success(usage)
+                                    }
+                                } else {
+                                    val allUsage = usageMeasurementService.getAllAppsTodayUsage()
+                                    withContext(Dispatchers.Main) {
+                                        result.success(allUsage)
+                                    }
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    result.error("USAGE_FAILED", e.message, null)
+                                }
                             }
-                        } catch (e: Exception) {
-                            result.error("USAGE_FAILED", e.message, null)
                         }
                     }
                     "getActiveNetwork" -> {

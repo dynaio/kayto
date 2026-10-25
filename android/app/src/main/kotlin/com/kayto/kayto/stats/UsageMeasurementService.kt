@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.usage.NetworkStats
 import android.app.usage.NetworkStatsManager
 import android.content.Context
+import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
@@ -197,6 +198,10 @@ class UsageMeasurementService(private val context: Context) {
 
         val results = mutableListOf<Map<String, Any?>>()
         for (app in packages) {
+            val isSystem = (app.flags and ApplicationInfo.FLAG_SYSTEM) != 0
+            if (isSystem && pm.checkPermission(android.Manifest.permission.INTERNET, app.packageName) != PackageManager.PERMISSION_GRANTED) {
+                continue
+            }
             val usage = getUsageForUid(app.packageName, app.uid, startTime, endTime)
             // Filter out apps with zero total usage to save memory/payload size
             val wifi = usage["wifiBytes"] as Long

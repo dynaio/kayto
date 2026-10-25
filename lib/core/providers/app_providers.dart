@@ -104,11 +104,16 @@ class VpnNotifier extends Notifier<VpnState> {
       final stats = await NativeChannel.getEnforcementStats();
       final net = await NativeChannel.getActiveNetwork();
 
-      state = state.copyWith(
-        isRunning: isRunning,
-        stats: stats,
-        activeNetwork: net,
-      );
+      if (state.isRunning != isRunning ||
+          state.stats.blockedPackets != stats.blockedPackets ||
+          state.stats.blockedBytes != stats.blockedBytes ||
+          state.activeNetwork != net) {
+        state = state.copyWith(
+          isRunning: isRunning,
+          stats: stats,
+          activeNetwork: net,
+        );
+      }
     } catch (_) {}
   }
 
