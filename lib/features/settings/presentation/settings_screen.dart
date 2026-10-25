@@ -4,6 +4,7 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:permission_handler/permission_handler.dart';
 import '../../../core/providers/settings_providers.dart';
 import '../../../native/channels/native_channel.dart';
+import 'about_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -65,6 +66,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
     final settingsAsync = ref.watch(appSettingsProvider);
     final settings = settingsAsync.value;
     final notifier = ref.read(appSettingsProvider.notifier);
@@ -126,7 +129,43 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                 ),
                 const SizedBox(height: 16),
 
-                // 2. Notifications
+                // 2. Service Persistence
+                _buildSectionHeader('Service'),
+                Card(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SwitchListTile(
+                        secondary: const Icon(Icons.push_pin_outlined),
+                        title: const Text(
+                          'Keep Kayto running',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: const Text(
+                          'Restarts service if app is swiped away from Recents or on reboot',
+                        ),
+                        value: settings.pinService,
+                        onChanged: (val) {
+                          notifier.setPinService(val);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(left: 8, right: 8, top: 6),
+                  child: Text(
+                    'Android may still stop apps you force-stop in system Settings. Kayto cannot override that.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontStyle: FontStyle.italic,
+                      color: colorScheme.outline,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+
+                // 3. Notifications
                 _buildSectionHeader('Notifications'),
                 Card(
                   child: Column(
@@ -161,7 +200,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w600,
-                                color: Theme.of(context).colorScheme.outline,
+                                color: colorScheme.outline,
                               ),
                             ),
                           ),
@@ -219,7 +258,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                 ),
                 const SizedBox(height: 16),
 
-                // 3. Data & cache
+                // 4. Data & cache
                 _buildSectionHeader('Data & cache'),
                 Card(
                   child: Padding(
@@ -239,7 +278,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                           'Controls in-memory caching TTL for package discovery',
                           style: TextStyle(
                             fontSize: 12,
-                            color: Theme.of(context).colorScheme.outline,
+                            color: colorScheme.outline,
                           ),
                         ),
                         const SizedBox(height: 12),
@@ -264,7 +303,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                 ),
                 const SizedBox(height: 16),
 
-                // 4. Display
+                // 5. Display
                 _buildSectionHeader('Display'),
                 Card(
                   child: SwitchListTile(
@@ -284,7 +323,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                 ),
                 const SizedBox(height: 16),
 
-                // 5. Permissions
+                // 6. Permissions
                 _buildSectionHeader('Permissions'),
                 Card(
                   child: Column(
@@ -329,57 +368,38 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen>
                 ),
                 const SizedBox(height: 16),
 
-                // 6. About
-                _buildSectionHeader('About'),
+                // 7. About & Legal
+                _buildSectionHeader('About & Legal'),
                 Card(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            ClipRRect(
-                              borderRadius: BorderRadius.circular(12),
-                              child: Image.asset(
-                                'assets/images/kayto_logo.png',
-                                width: 52,
-                                height: 52,
-                                errorBuilder: (_, __, ___) =>
-                                    const Icon(Icons.shield, size: 52),
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'Kayto',
-                                    style: TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Version ${_packageInfo?.version ?? "0.1.0"} (Build ${_packageInfo?.buildNumber ?? "1"})',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color:
-                                          Theme.of(context).colorScheme.outline,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  const Text(
-                                    'Kayto v0.1.0 — per-app, per-source internet control',
-                                    style: TextStyle(fontSize: 12),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                  child: ListTile(
+                    leading: ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.asset(
+                        'assets/images/kayto_logo.png',
+                        width: 36,
+                        height: 36,
+                        errorBuilder: (_, __, ___) =>
+                            const Icon(Icons.info_outline, size: 36),
+                      ),
                     ),
+                    title: const Text(
+                      'About Kayto',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    subtitle: Text(
+                      'v${_packageInfo?.version ?? "0.1.0"} • Berassil Abdelkader • Privacy Policy',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.outline,
+                      ),
+                    ),
+                    trailing: const Icon(Icons.chevron_right),
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const AboutScreen()),
+                      );
+                    },
                   ),
                 ),
                 const SizedBox(height: 32),

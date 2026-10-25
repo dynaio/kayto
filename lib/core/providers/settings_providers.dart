@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../features/settings/data/settings_repository.dart';
 import '../../features/settings/domain/app_settings.dart';
+import '../../native/channels/native_channel.dart';
 
 final settingsRepositoryProvider = Provider<SettingsRepository>((ref) {
   return SettingsRepository();
@@ -12,7 +13,12 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
 
   @override
   Future<AppSettings> build() async {
-    return await _repo.load();
+    final settings = await _repo.load();
+    // Sync native pin service state on initial load
+    try {
+      await NativeChannel.setPinService(settings.pinService);
+    } catch (_) {}
+    return settings;
   }
 
   Future<void> setThemeMode(ThemeMode mode) async {
@@ -48,6 +54,16 @@ class AppSettingsNotifier extends AsyncNotifier<AppSettings> {
     final updated = current.copyWith(showSystemApps: show);
     state = AsyncData(updated);
     await _repo.save(updated);
+  }
+
+  Future<void> setPinService(bool pin) async {
+    final current = state.value ?? const AppSettings();
+    final updated = current.copyWith(pinService: pin);
+    state = AsyncData(updated);
+    await _repo.save(updated);
+    try {
+      await NativeChannel.setPinService(pin);
+    } catch (_) {}
   }
 }
 

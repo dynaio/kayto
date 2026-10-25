@@ -141,6 +141,35 @@ class NativeChannel {
     return result ?? false;
   }
 
+  static Future<Map<String, dynamic>> getRealtimeDeviceSpeed() async {
+    final result = await _channel.invokeMethod<Map<dynamic, dynamic>>('getRealtimeDeviceSpeed');
+    return (result ?? const <dynamic, dynamic>{}).cast<String, dynamic>();
+  }
+
+  static Future<List<UsageRecord>> getPerAppUsageSnapshot([List<String>? packages]) async {
+    final result = await _channel.invokeMethod<List<dynamic>>(
+      'getPerAppUsageSnapshot',
+      packages != null ? {'packages': packages} : null,
+    );
+    return (result ?? const <dynamic>[])
+        .cast<Map<dynamic, dynamic>>()
+        .map((e) => UsageRecord.fromMap(e.cast<String, dynamic>()))
+        .toList();
+  }
+
+  static Future<bool> setPinService(bool enabled) async {
+    final result = await _channel.invokeMethod<bool>(
+      'setPinService',
+      {'enabled': enabled},
+    );
+    return result ?? false;
+  }
+
+  static Future<bool> isPinServiceEnabled() async {
+    final result = await _channel.invokeMethod<bool>('isPinServiceEnabled');
+    return result ?? true;
+  }
+
   static Stream<Map<String, dynamic>> eventsStream() =>
       _events.receiveBroadcastStream().map(
             (e) => (e as Map).cast<String, dynamic>(),

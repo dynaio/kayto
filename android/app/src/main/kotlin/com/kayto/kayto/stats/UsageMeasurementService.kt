@@ -138,6 +138,39 @@ class UsageMeasurementService(private val context: Context) {
     }
 
     /**
+     * Fast snapshot of today's usage for a specified list of monitored packages.
+     */
+    fun getPerAppUsageSnapshot(packages: List<String>): List<Map<String, Any?>> {
+        val calendar = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val startTime = calendar.timeInMillis
+        val endTime = System.currentTimeMillis()
+        val pm = context.packageManager
+
+        val results = mutableListOf<Map<String, Any?>>()
+        for (pkg in packages) {
+            val uid = try {
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    pm.getPackageUid(pkg, PackageManager.PackageInfoFlags.of(0L))
+                } else {
+                    @Suppress("DEPRECATION")
+                    pm.getPackageUid(pkg, 0)
+                }
+            } catch (_: Exception) {
+                continue
+            }
+
+            val usage = getUsageForUid(pkg, uid, startTime, endTime)
+            results.add(usage)
+        }
+        return results
+    }
+
+    /**
      * Measures data usage for all installed apps for today.
      */
     fun getAllAppsTodayUsage(): List<Map<String, Any?>> {

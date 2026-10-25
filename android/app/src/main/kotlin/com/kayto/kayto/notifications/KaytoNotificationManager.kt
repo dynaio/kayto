@@ -10,6 +10,7 @@ import android.os.Build
 import androidx.core.app.NotificationCompat
 import com.kayto.kayto.MainActivity
 import com.kayto.kayto.model.NetworkSource
+import com.kayto.kayto.service.KaytoVpnService
 
 class KaytoNotificationManager(private val context: Context) {
 
@@ -22,6 +23,7 @@ class KaytoNotificationManager(private val context: Context) {
         const val CHANNEL_ENFORCEMENT = "kayto_enforcement_channel"
 
         const val NOTIFICATION_ID_VPN = 1001
+        const val NOTIFICATION_ID_HEARTBEAT_ALERT = 1002
         private var alertNotificationId = 2000
     }
 
@@ -66,6 +68,14 @@ class KaytoNotificationManager(private val context: Context) {
         }
     }
 
+    /**
+     * Builds the pinned foreground notification for the VPN service.
+     * Note: Since Android 13 (API 33), users can dismiss foreground service notifications
+     * individually by default. For a VpnService, the Android system also displays its own
+     * non-dismissible VPN key indicator in the status bar. If the user dismisses Kayto's
+     * notification, the service remains running and will re-post the notification on the
+     * next onStartCommand or heartbeat tick.
+     */
     fun buildVpnNotification(
         monitoredCount: Int,
         blockedSourcesCount: Int,
@@ -81,6 +91,17 @@ class KaytoNotificationManager(private val context: Context) {
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
 
+        // Action button to stop Kayto intentionally
+        val stopIntent = Intent(context, KaytoVpnService::class.java).apply {
+            action = KaytoVpnService.ACTION_STOP
+        }
+        val stopPendingIntent = PendingIntent.getService(
+            context,
+            99,
+            stopIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
         val title = "Kayto Protection Active"
         val contentText = if (blockedSourcesCount > 0) {
             "$monitoredCount apps monitored · $blockedSourcesCount limit(s) reached · $blockedPackets blocked"
@@ -88,7 +109,7 @@ class KaytoNotificationManager(private val context: Context) {
             "$monitoredCount apps monitored · All networks within limits"
         }
 
-        return NotificationCompat.Builder(context, CHANNEL_VPN)
+        val builder = NotificationCompat.Builder(context, CHANNEL_VPN)
             .setSmallIcon(android.R.drawable.ic_lock_idle_lock)
             .setContentTitle(title)
             .setContentText(contentText)
@@ -96,7 +117,38 @@ class KaytoNotificationManager(private val context: Context) {
             .setOngoing(true)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .addAction(
+                android.R.drawable.ic_menu_close_clear_cancel,
+                "Stop Kayto",
+                stopPendingIntent
+            )
+
+        val notification = builder.build()
+        notification.flags = notification.flags or Notification.FLAG_NO_CLEAR
+        return notification
+    }
+
+    fun showHeartbeatFailureNotification() {
+        val launchIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val pendingIntent = PendingIntent.getActivity(
+            context,
+            NOTIFICATION_ID_HEARTBEAT_ALERT,
+            launchIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        val notification = NotificationCompat.Builder(context, CHANNEL_ENFORCEMENT)
+            .setSmallIcon(android.R.drawable.stat_notify_error)
+            .setContentTitle("Kayto stopped unexpectedly")
+            .setContentText("Tap to reopen and restore protection")
+            .setContentIntent(pendingIntent)
+            .setAutoCancel(true)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
             .build()
+
+        notificationManager.notify(NOTIFICATION_ID_HEARTBEAT_ALERT, notification)
     }
 
     fun showThresholdNotification(

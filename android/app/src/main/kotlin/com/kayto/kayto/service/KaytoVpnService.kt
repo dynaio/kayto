@@ -1,6 +1,8 @@
 package com.kayto.kayto.service
 
+import android.app.AlarmManager
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -57,11 +59,13 @@ class KaytoVpnService : VpnService() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        val action = intent?.action ?: ACTION_START
+        // If system restarts the service with null intent, check if VPN was expected to be active
+        val action = intent?.action ?: if (storage.isVpnEnabled()) ACTION_START else ACTION_STOP
 
         when (action) {
             ACTION_START -> {
                 storage.setVpnEnabled(true)
+                storage.resetHeartbeatFailCount()
                 isRunning.set(true)
                 startForegroundServiceNotification()
                 registerNetworkCallback()
@@ -78,6 +82,29 @@ class KaytoVpnService : VpnService() {
         }
 
         return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // If user has enabled Keep Kayto Running (pin service), schedule immediate AlarmManager resurrection
+        if (storage.isPinServiceEnabled() && storage.isVpnEnabled()) {
+            Log.i(TAG, "Task removed from Recents; scheduling AlarmManager resurrection")
+            val restartIntent = Intent(applicationContext, KaytoVpnService::class.java).apply {
+                action = ACTION_START
+            }
+            val pending = PendingIntent.getService(
+                applicationContext,
+                1,
+                restartIntent,
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            )
+            val am = getSystemService(ALARM_SERVICE) as? AlarmManager
+            am?.set(
+                AlarmManager.RTC,
+                System.currentTimeMillis() + 1000,
+                pending
+            )
+        }
     }
 
     private fun startForegroundServiceNotification() {

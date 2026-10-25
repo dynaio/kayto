@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../core/providers/app_providers.dart';
 import '../../../native/models/app_info.dart';
+import '../../../native/models/app_rule.dart';
 import '../../../native/models/enforcement_stats.dart';
 import '../../../native/models/network_source.dart';
 import '../../../native/models/sim_info.dart';
@@ -9,13 +10,20 @@ import '../../../native/models/usage_record.dart';
 import '../../apps/presentation/apps_screen.dart';
 import '../../rules/presentation/rule_editor_screen.dart';
 import '../../settings/presentation/settings_screen.dart';
+import '../../usage/domain/per_app_usage_provider.dart';
+import '../../usage/domain/realtime_speed_provider.dart';
 import '../../usage/presentation/usage_detail_screen.dart';
+import '../../../core/utils/bytes.dart';
 
 class DashboardScreen extends ConsumerWidget {
   const DashboardScreen({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    // Realtime speed & usage snapshot providers
+    final speedAsync = ref.watch(realtimeSpeedProvider);
+    final perAppUsageAsync = ref.watch(perAppUsageSnapshotProvider);
+
     // Selective watching to prevent unnecessary re-renders
     final isRunning = ref.watch(vpnStateProvider.select((s) => s.isRunning));
     final stats = ref.watch(vpnStateProvider.select((s) => s.stats));
@@ -130,7 +138,18 @@ class DashboardScreen extends ConsumerWidget {
             ),
             const SizedBox(height: 16),
 
-            // 3. Permission Health Card
+            // 3. Real-Time Network Speed & Top Monitored Apps Card
+            _buildRealtimeUsageCard(
+              context,
+              speedAsync: speedAsync,
+              perAppUsageAsync: perAppUsageAsync,
+              allApps: allApps,
+              rulesMap: rulesMap,
+              activeNetwork: activeNetwork,
+            ),
+            const SizedBox(height: 16),
+
+            // 4. Permission Health Card
             permissionsAsync.when(
               data: (health) => _buildPermissionHealthCard(context, ref, health),
               loading: () => const SizedBox.shrink(),
@@ -662,6 +681,384 @@ class DashboardScreen extends ConsumerWidget {
             ),
           ),
       ],
+    );
+  }
+
+  Widget _buildRealtimeUsageCard(
+    BuildContext context, {
+    required AsyncValue<NetworkSpeed> speedAsync,
+    required AsyncValue<List<UsageRecord>> perAppUsageAsync,
+    required List<AppInfo> allApps,
+    required Map<String, List<AppRule>> rulesMap,
+    required String activeNetwork,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final speed = speedAsync.value ?? const NetworkSpeed();
+
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(
+          color: colorScheme.outlineVariant.withValues(alpha: 0.5),
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header with LIVE badge
+            Row(
+              children: [
+                Icon(Icons.speed, color: colorScheme.primary, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  'Real-Time Internet Speed',
+                  style: theme.textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const Spacer(),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: Colors.green.withValues(alpha: 0.4),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 6,
+                        height: 6,
+                        decoration: const BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      const Text(
+                        'LIVE',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                          letterSpacing: 0.5,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+
+            // Live Speeds
+            if (speed.unsupported)
+              Text(
+                'Real-time speed unavailable on this device kernel',
+                style: TextStyle(color: colorScheme.error, fontSize: 12),
+              )
+            else
+              Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.5,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.arrow_downward,
+                            color: Colors.blue.shade400,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  formatSpeed(speed.rxBps),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                Text(
+                                  'Download',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: colorScheme.outline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        vertical: 10,
+                        horizontal: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest.withValues(
+                          alpha: 0.5,
+                        ),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.arrow_upward,
+                            color: Colors.purple.shade300,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  formatSpeed(speed.txBps),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 15,
+                                  ),
+                                ),
+                                Text(
+                                  'Upload',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: colorScheme.outline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 12),
+
+            // Top monitored apps usage & cutoff badges
+            Text(
+              'Active Monitored Apps (Today)',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: colorScheme.outline,
+                letterSpacing: 0.3,
+              ),
+            ),
+            const SizedBox(height: 8),
+
+            perAppUsageAsync.when(
+              data: (records) {
+                if (records.isEmpty) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'No monitored apps with activity yet today.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: colorScheme.outline,
+                      ),
+                    ),
+                  );
+                }
+
+                // Sort by totalBytes descending and take top 3
+                final sorted = List<UsageRecord>.from(records)
+                  ..sort((a, b) => b.totalBytes.compareTo(a.totalBytes));
+                final top3 = sorted.take(3).toList();
+
+                return Column(
+                  children: top3.map((record) {
+                    final appInfo = allApps.firstWhere(
+                      (a) => a.packageName == record.packageName,
+                      orElse: () => AppInfo(
+                        packageName: record.packageName,
+                        label: record.packageName.split('.').last,
+                      ),
+                    );
+
+                    final rules = rulesMap[record.packageName] ?? [];
+                    final List<String> cutoffs = [];
+                    int? activeLimitBytes;
+                    int activeUsedBytes = 0;
+
+                    for (final r in rules) {
+                      if (r.limitMb == null) continue;
+                      final lim = r.limitMb! * 1024 * 1024;
+                      final used = (r.source == NetworkSource.wifi)
+                          ? record.wifiBytes
+                          : (r.source == NetworkSource.sim1)
+                              ? record.sim1Bytes
+                              : record.sim2Bytes;
+                      if (used >= lim) {
+                        cutoffs.add('CUT OFF (${r.source.displayName})');
+                      }
+                      if ((activeNetwork.contains('WIFI') &&
+                              r.source == NetworkSource.wifi) ||
+                          (activeNetwork.contains('SIM_1') &&
+                              r.source == NetworkSource.sim1) ||
+                          (activeNetwork.contains('SIM_2') &&
+                              r.source == NetworkSource.sim2)) {
+                        activeLimitBytes = lim;
+                        activeUsedBytes = used;
+                      }
+                    }
+
+                    final progress =
+                        (activeLimitBytes != null && activeLimitBytes > 0)
+                            ? (activeUsedBytes / activeLimitBytes).clamp(0.0, 1.0)
+                            : null;
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 6),
+                      child: Column(
+                        children: [
+                          Row(
+                            children: [
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(8),
+                                child: appInfo.icon != null
+                                    ? Image.memory(
+                                        appInfo.icon!,
+                                        width: 28,
+                                        height: 28,
+                                        fit: BoxFit.cover,
+                                      )
+                                    : const Icon(Icons.android, size: 28),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      appInfo.label,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                    Text(
+                                      '${formatBytes(record.totalBytes)} used today',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: colorScheme.outline,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (cutoffs.isNotEmpty)
+                                Wrap(
+                                  spacing: 4,
+                                  children: cutoffs.map((badge) {
+                                    return Container(
+                                      padding: const EdgeInsets.symmetric(
+                                        horizontal: 6,
+                                        vertical: 2,
+                                      ),
+                                      decoration: BoxDecoration(
+                                        color: Colors.red.withValues(alpha: 0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                        border: Border.all(
+                                          color: Colors.red.withValues(alpha: 0.5),
+                                        ),
+                                      ),
+                                      child: Text(
+                                        badge,
+                                        style: const TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.red,
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
+                                )
+                              else if (activeLimitBytes != null)
+                                Text(
+                                  '${formatBytes(activeUsedBytes)} / ${formatBytes(activeLimitBytes)}',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w500,
+                                    color: colorScheme.onSurfaceVariant,
+                                  ),
+                                ),
+                            ],
+                          ),
+                          if (progress != null) ...[
+                            const SizedBox(height: 6),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: progress,
+                                minHeight: 4,
+                                backgroundColor:
+                                    colorScheme.surfaceContainerHighest,
+                                color: progress >= 1.0
+                                    ? Colors.red
+                                    : progress >= 0.8
+                                        ? Colors.amber
+                                        : colorScheme.primary,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                );
+              },
+              loading: () => const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  ),
+                ),
+              ),
+              error: (_, __) => Text(
+                'Could not read app usage snapshot',
+                style: TextStyle(fontSize: 11, color: colorScheme.error),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

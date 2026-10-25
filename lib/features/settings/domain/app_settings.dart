@@ -6,6 +6,7 @@ class AppSettings {
   final List<int> enabledThresholds;
   final Duration appListCacheTtl;
   final bool showSystemApps;
+  final bool pinService;
 
   const AppSettings({
     this.themeMode = ThemeMode.system,
@@ -13,6 +14,7 @@ class AppSettings {
     this.enabledThresholds = const [50, 70, 90, 100],
     this.appListCacheTtl = const Duration(seconds: 30),
     this.showSystemApps = false,
+    this.pinService = true,
   });
 
   AppSettings copyWith({
@@ -21,6 +23,7 @@ class AppSettings {
     List<int>? enabledThresholds,
     Duration? appListCacheTtl,
     bool? showSystemApps,
+    bool? pinService,
   }) {
     return AppSettings(
       themeMode: themeMode ?? this.themeMode,
@@ -28,6 +31,7 @@ class AppSettings {
       enabledThresholds: enabledThresholds ?? this.enabledThresholds,
       appListCacheTtl: appListCacheTtl ?? this.appListCacheTtl,
       showSystemApps: showSystemApps ?? this.showSystemApps,
+      pinService: pinService ?? this.pinService,
     );
   }
 
@@ -38,6 +42,7 @@ class AppSettings {
       'enabledThresholds': enabledThresholds,
       'appListCacheTtlSeconds': appListCacheTtl.inSeconds,
       'showSystemApps': showSystemApps,
+      'pinService': pinService,
     };
   }
 
@@ -61,6 +66,7 @@ class AppSettings {
       enabledThresholds: thresholds,
       appListCacheTtl: Duration(seconds: ttlSeconds),
       showSystemApps: (json['showSystemApps'] as bool?) ?? false,
+      pinService: (json['pinService'] as bool?) ?? true,
     );
   }
 }

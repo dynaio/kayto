@@ -12,9 +12,11 @@ import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.net.VpnService
 import android.os.Build
+import android.net.TrafficStats
 import android.os.Bundle
 import android.os.PowerManager
 import android.os.Process
+import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationManagerCompat
@@ -49,6 +51,11 @@ class MainActivity : FlutterActivity() {
     private var cachedApps: List<Map<String, Any?>>? = null
     private var cacheTimestamp: Long = 0L
     private val CACHE_TTL_MS = 30_000L
+
+    // Realtime device speed tracking (TrafficStats)
+    private var lastRxBytes: Long = -1L
+    private var lastTxBytes: Long = -1L
+    private var lastSpeedTimestamp: Long = 0L
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -258,6 +265,76 @@ class MainActivity : FlutterActivity() {
                             startActivity(fallbackIntent)
                             result.success(true)
                         }
+                    }
+                    "getRealtimeDeviceSpeed" -> {
+                        val currentRx = TrafficStats.getTotalRxBytes()
+                        val currentTx = TrafficStats.getTotalTxBytes()
+                        val now = SystemClock.elapsedRealtime()
+
+                        if (currentRx == TrafficStats.UNSUPPORTED.toLong() || currentTx == TrafficStats.UNSUPPORTED.toLong()) {
+                            result.success(mapOf("unsupported" to true))
+                            return@setMethodCallHandler
+                        }
+
+                        val deltaMs = now - lastSpeedTimestamp
+                        if (lastRxBytes < 0 || lastTxBytes < 0 || deltaMs <= 0) {
+                            lastRxBytes = currentRx
+                            lastTxBytes = currentTx
+                            lastSpeedTimestamp = now
+                            result.success(
+                                mapOf(
+                                    "rxBps" to 0L,
+                                    "txBps" to 0L,
+                                    "unsupported" to false
+                                )
+                            )
+                        } else {
+                            val deltaRx = (currentRx - lastRxBytes).coerceAtLeast(0L)
+                            val deltaTx = (currentTx - lastTxBytes).coerceAtLeast(0L)
+                            val rxBps = (deltaRx * 1000L) / deltaMs
+                            val txBps = (deltaTx * 1000L) / deltaMs
+
+                            lastRxBytes = currentRx
+                            lastTxBytes = currentTx
+                            lastSpeedTimestamp = now
+
+                            result.success(
+                                mapOf(
+                                    "rxBps" to rxBps,
+                                    "txBps" to txBps,
+                                    "unsupported" to false
+                                )
+                            )
+                        }
+                    }
+                    "getPerAppUsageSnapshot" -> {
+                        val packages = call.argument<List<String>>("packages")
+                        lifecycleScope.launch(Dispatchers.IO) {
+                            try {
+                                val targetPackages = if (!packages.isNullOrEmpty()) {
+                                    packages
+                                } else {
+                                    storage.getRules().map { it.packageName }.distinct()
+                                }
+                                val snapshot = usageMeasurementService.getPerAppUsageSnapshot(targetPackages)
+                                withContext(Dispatchers.Main) {
+                                    result.success(snapshot)
+                                }
+                            } catch (e: Exception) {
+                                withContext(Dispatchers.Main) {
+                                    result.error("SNAPSHOT_FAILED", e.message, null)
+                                }
+                            }
+                        }
+                    }
+                    "setPinService" -> {
+                        val enabled = call.argument<Boolean>("enabled") ?: true
+                        storage.setPinServiceEnabled(enabled)
+                        KaytoApp.updateHeartbeatSchedule(this@MainActivity, enabled)
+                        result.success(true)
+                    }
+                    "isPinServiceEnabled" -> {
+                        result.success(storage.isPinServiceEnabled())
                     }
                     else -> result.notImplemented()
                 }

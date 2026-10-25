@@ -17,6 +17,8 @@ class KaytoStorage(context: Context) {
         private const val PREFS_NAME = "kayto_native_prefs"
         private const val KEY_RULES_JSON = "key_rules_json"
         private const val KEY_VPN_ENABLED = "key_vpn_enabled"
+        private const val KEY_PIN_SERVICE = "key_pin_service"
+        private const val KEY_HEARTBEAT_FAIL_COUNT = "key_heartbeat_fail_count"
         private const val KEY_BLOCKED_PACKETS_COUNT = "key_blocked_packets_count"
         private const val KEY_BLOCKED_BYTES_COUNT = "key_blocked_bytes_count"
         private const val KEY_STATS_DATE = "key_stats_date"
@@ -66,6 +68,26 @@ class KaytoStorage(context: Context) {
 
     fun isVpnEnabled(): Boolean {
         return prefs.getBoolean(KEY_VPN_ENABLED, false)
+    }
+
+    fun setPinServiceEnabled(enabled: Boolean) {
+        prefs.edit().putBoolean(KEY_PIN_SERVICE, enabled).apply()
+    }
+
+    fun isPinServiceEnabled(): Boolean {
+        return prefs.getBoolean(KEY_PIN_SERVICE, true)
+    }
+
+    fun getHeartbeatFailCount(): Int {
+        return prefs.getInt(KEY_HEARTBEAT_FAIL_COUNT, 0)
+    }
+
+    fun setHeartbeatFailCount(count: Int) {
+        prefs.edit().putInt(KEY_HEARTBEAT_FAIL_COUNT, count).apply()
+    }
+
+    fun resetHeartbeatFailCount() {
+        prefs.edit().putInt(KEY_HEARTBEAT_FAIL_COUNT, 0).apply()
     }
 
     fun incrementBlockedStats(packets: Long = 1, bytes: Long = 0) {
